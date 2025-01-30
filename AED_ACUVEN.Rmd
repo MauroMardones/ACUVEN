@@ -17,6 +17,8 @@ library(readxl)
 library(here)
 library(janitor)
 library(ggthemes)
+library(vegan)# Para métricas ecológicas
+library(ggdendro)
 ```
 
 ```{r}
@@ -118,13 +120,6 @@ ggplot(datainf3, aes(x = reorder(punto, -no_ejemplares),
 ```
 
 ```{r}
-# Instalar paquetes si no están disponibles
-install.packages("tidyverse")
-install.packages("vegan")  # Para métricas ecológicas
-
-library(tidyverse)
-library(vegan)
-
 # Asegúrate de que `no_ejemplares` sea numérico
 datainf4 <- datainf3 %>%
   mutate(no_ejemplares = replace_na(as.numeric(no_ejemplares), 0))
@@ -146,7 +141,42 @@ clust <- hclust(distancias, method = "complete")
 plot(clust, main = "Clustering jerárquico de familias por punto", 
      xlab = "Puntos de muestreo", sub = "", ylab = "Distancia")
 
+
+# Calcular dendrograma a partir del clustering jerárquico
+dendro_data <- as.dendrogram(clust)
+dendro_df <- dendro_data %>% dendro_data()
+
+# Extraer etiquetas del dendrograma
+label_df <- dendro_df$labels
+label_df$y <- -0.5  # Ajustar posición de las etiquetas
+
+# Crear gráfico con ggplot2
+ggplot(segment(dendro_df)) +
+  geom_segment(aes(x = x, y = y, xend = xend, yend = yend)) +
+  geom_text(
+    data = label_df, aes(x = x, y = y, label = label),
+    hjust = 0.5, vjust = 1.5, size = 3
+  ) +
+  labs(
+    title = "Clustering jerárquico de familias por punto",
+    x = "",
+    y = "Distancia"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_blank())  # Se oculta el eje x base
 ```
+Este dendrograma muestra el resultado del análisis de agrupamiento jerárquico de los puntos de muestreo en función de las familias encontradas.
+
+Eje vertical: distancia o disimilitud entre grupos. Cuanto más alto es el nodo donde dos puntos o grupos se unen, más diferentes son entre sí.
+
+Agrupamientos cercanos:
+
+Por ejemplo, E68 y E70 están muy cerca, lo que sugiere una composición muy similar de familias.
+Lo mismo ocurre con E59, E69 y E64.
+Distancias grandes:
+E73 se encuentra muy alejado del resto, lo que sugiere que su composición de familias es la más distinta.
+
+
 
 nmds
 
