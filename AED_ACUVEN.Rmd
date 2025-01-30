@@ -1,0 +1,30 @@
+---
+title: "AED Infauna Bentónica Proyecto ACUVEN 2019"
+author: "Mauricio Mardones I."
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(tidyr)
+library(tidyverse)
+library(readxl)
+library(here)
+```
+
+```{r}
+datainf <- read_excel(here("data",
+                           "fAUNA MUESTREOS.xlsx"))
+```
+# Llenar hacia abajo las columnas que contienen valores faltantes
+
+```{r}
+datos_limpios <- datos %>%
+  fill(columna1, columna2, columna3, .direction = "down")
+
+```
