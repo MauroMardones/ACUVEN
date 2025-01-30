@@ -15,16 +15,173 @@ library(tidyr)
 library(tidyverse)
 library(readxl)
 library(here)
+library(janitor)
+library(ggthemes)
 ```
 
 ```{r}
 datainf <- read_excel(here("data",
                            "fAUNA MUESTREOS.xlsx"))
 ```
+nombre de columnas a llenar
+
+```{r}
+names(datainf)
+
+# Limpiar nombres de columnas
+datainf <- datainf %>%
+  clean_names()
+
+# Verificar los nuevos nombres
+names(datainf)
+
+```
+
 # Llenar hacia abajo las columnas que contienen valores faltantes
 
 ```{r}
-datos_limpios <- datos %>%
-  fill(columna1, columna2, columna3, .direction = "down")
+datainf2 <- datainf %>%
+  select(1,4,7,8,9,10,11,12,13,14) %>% 
+  fill("caja" , "punto", "depth_m", "fecha",
+       "tipo", "tipo_sedimento",.direction = "down")
+```
+
+
+
+voy a seprasar los numeros del nombre en la columna `fam`
+
+```{r}
+# Separar números al final de la columna `fam`
+datainf3 <- datainf2 %>%
+  mutate(fam = str_trim(fam)) %>% # Limpia espacios
+  separate(fam, into = c("family", "count"), 
+           sep = "\\s*(\\d+)$", 
+           extra = "merge", 
+           fill = "right")
+
+# Revisar resultado
+head(datainf3)
+```
+primer grafico de columnas
+
+```{r}
+# Crear el gráfico de columnas
+ggplot(datainf3, aes(x = reorder(organismos, -no_ejemplares),
+                     y = no_ejemplares)) +
+  geom_col(fill = "steelblue") +
+  labs(
+    title = "Número de ejemplares por grupo",
+    x = "Familia",
+    y = "Número de ejemplares"
+  ) +
+  #facet_wrap(~punto, ncol=1)+
+  theme_few() +
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1))+
+  coord_flip()
+```
+por especie
+
+```{r}
+# Crear el gráfico de columnas
+ggplot(datainf3, aes(x = reorder(especie, -no_ejemplares),
+                     y = no_ejemplares)) +
+  geom_col(fill = "green") +
+  labs(
+    title = "Número de ejemplares por especie",
+    x = "Familia",
+    y = "Número de ejemplares"
+  ) +
+  #facet_wrap(~punto, ncol=1)+
+  theme_few() +
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1))+
+  coord_flip()
+```
+por especie
+
+```{r}
+# Crear el gráfico de columnas
+ggplot(datainf3, aes(x = reorder(punto, -no_ejemplares),
+                     y = no_ejemplares)) +
+  geom_col(fill = "red") +
+  labs(
+    title = "Número de ejemplares por punto",
+    x = "Familia",
+    y = "Número de ejemplares"
+  ) +
+  #facet_wrap(~punto, ncol=1)+
+  theme_few() +
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1))+
+  coord_flip()
+```
+
+```{r}
+# Instalar paquetes si no están disponibles
+install.packages("tidyverse")
+install.packages("vegan")  # Para métricas ecológicas
+
+library(tidyverse)
+library(vegan)
+
+# Asegúrate de que `no_ejemplares` sea numérico
+datainf4 <- datainf3 %>%
+  mutate(no_ejemplares = replace_na(as.numeric(no_ejemplares), 0))
+
+# Crear matriz de abundancia: puntos x familias
+abundancia <- datainf4 %>%
+  group_by(punto, family) %>%
+  summarise(total_ejemplares = sum(no_ejemplares, na.rm = TRUE)) %>%
+  pivot_wider(names_from = family, values_from = total_ejemplares, values_fill = 0) %>%
+  column_to_rownames("punto")
+
+# Calcular distancias (Euclídeas o Jaccard para datos binarios)
+distancias <- vegdist(abundancia, method = "euclidean")  # También puedes usar "jaccard"
+
+# Clustering jerárquico
+clust <- hclust(distancias, method = "complete")
+
+# Visualizar dendrograma
+plot(clust, main = "Clustering jerárquico de familias por punto", 
+     xlab = "Puntos de muestreo", sub = "", ylab = "Distancia")
 
 ```
+
+nmds
+
+
+```{r}
+# Preparar la matriz de abundancia: puntos x familias
+abundancia <- datainf3 %>%
+  mutate(no_ejemplares = replace_na(as.numeric(no_ejemplares), 0)) %>%
+  group_by(punto, family) %>%
+  summarise(total_ejemplares = sum(no_ejemplares, na.rm = TRUE)) %>%
+  pivot_wider(names_from = family, values_from = total_ejemplares, values_fill = 0) %>%
+  column_to_rownames("punto")
+
+# NMDS usando la distancia Bray-Curtis
+nmds_result <- metaMDS(abundancia, distance = "bray", k = 2, trymax = 100)
+
+# Visualización del NMDS
+plot(nmds_result, type = "n", main = "NMDS: Familias por Punto de Muestreo")
+text(nmds_result, display = "sites", col = "blue")  # Etiquetas de puntos
+points(nmds_result$points, pch = 19, col = "darkgreen")  # Puntos en el gráfico
+```
+o
+
+```{r}
+# Extraer coordenadas del NMDS
+nmds_coords <- as.data.frame(nmds_result$points)
+nmds_coords$punto <- rownames(nmds_coords)
+
+# Graficar con ggplot2
+ggplot(nmds_coords, aes(x = MDS1, y = MDS2, label = punto)) +
+  geom_point(color = "darkgreen", size = 3) +
+  geom_text(vjust = -0.5) +
+  labs(title = "NMDS: Familias por Punto de Muestreo",
+       x = "Dimensión 1", y = "Dimensión 2") +
+  theme_minimal()
+
+```
+
