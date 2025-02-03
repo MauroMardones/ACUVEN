@@ -1,14 +1,63 @@
 ---
-title: "AED Infauna Bentónica Proyecto ACUVEN 2019"
-author: "Mauricio Mardones I."
-date: "`r Sys.Date()`"
-output: pdf_document
+title: "Infauna Bentónica Proyecto ACUVEN 2019"
+subtitle: "Analisis Exploratorio de Datos Infauna. Descripción cuantitativa y ecológica"
+author:
+  - Mauricio Mardones^[Instituto español de Oceanografía, Cádiz. mauricio.mardones@csic.ieo.es]
+  - Yolanda Lucas ^[Instituto español de Oceanografía, Cádiz.]
+  - Marina Delgado ^[Instituto español de Oceanografía, Cádiz.]
+output:
+  bookdown::pdf_document2:
+    number_sections: false
+fig_caption: yes
+#bibliography: acuven.bib
+#csl: apa.csl
+link-citations: yes
+toc: false
+linkcolor: blue
+linestretch: 1.3
+keep_tex: true
+header-includes:
+- \fontsize{12}{16}
+- \selectfont
+- \usepackage{lscape}
+- \usepackage{pdflscape}
+- \usepackage{booktabs}
+- \usepackage{caption}
+- \usepackage{xcolor}
+- \usepackage{colortbl}
+- \usepackage{longtable}
 ---
+\newpage
+\tableofcontents
+\newpage
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+
+```{r setup1, echo=FALSE}
+rm(list = ls())
+knitr::opts_chunk$set(eval=TRUE,
+                      echo = FALSE,
+                      message = FALSE,
+                      warning = FALSE,
+                      fig.align = 'center',
+                      dev = 'jpeg',
+                      dpi = 300,
+                      tidy.opts=list(width.cutoff=80))
+#XQuartz is a mess, put this in your onload to default to cairo instead
+options(bitmapType = "cairo") 
+# (https://github.com/tidyverse/ggplot2/issues/2655)
+# Lo mapas se hacen mas rapido
 ```
 
+
+# Contexto
+
+El proyecto INBENTO, financiado por la Unión Europea y ejecutado por el IEO, ha centrado sus esfuerzos en la evaluación cuantitativa y ecológica de la infauna en el Golfo de Cádiz, un ecosistema clave para la biodiversidad marina y la pesquería artesanal. A través de un análisis exhaustivo de los datos recolectados durante las campañas de muestreo, se han estudiado las comunidades de invertebrados bentónicos, con un enfoque en especies de interés ecológico y pesquero, como la coquina (*Donax trunculus*). Utilizando métodos estadísticos avanzados, se evalua la estructura de las comunidades, su distribución espacial  y la relación de estas con factores ambientales, como la temperatura, salinidad y tipo de sustrato.  Este reporte presenta los resultados de estos análisis cuantitativos, los cuales proporcionan una visión clara sobre la salud y la resiliencia de la infauna del Golfo de Cádiz.
+
+# Metodología
+
+Librerías necesarias para manipulacion y analisis estadisticos de los datos
+
+### Cargar Librerías 
 
 ```{r}
 library(tidyr)
@@ -19,27 +68,31 @@ library(janitor)
 library(ggthemes)
 library(vegan)# Para métricas ecológicas
 library(ggdendro)
+library(flextable)
+library(purrr)
+library(kableExtra)
 ```
+### Leer data
 
 ```{r}
 datainf <- read_excel(here("data",
                            "fAUNA MUESTREOS.xlsx"))
 ```
-nombre de columnas a llenar
+
+
+
+### Manipulacion  procesamiento
+
+Limpio las columnas si es necesario.
 
 ```{r}
 names(datainf)
-
-# Limpiar nombres de columnas
 datainf <- datainf %>%
   clean_names()
-
-# Verificar los nuevos nombres
 names(datainf)
-
 ```
 
-# Llenar hacia abajo las columnas que contienen valores faltantes
+### Llenar hacia abajo las columnas que contienen valores faltantes
 
 ```{r}
 datainf2 <- datainf %>%
@@ -48,45 +101,78 @@ datainf2 <- datainf %>%
        "tipo", "tipo_sedimento",.direction = "down")
 ```
 
-
-
-voy a seprasar los numeros del nombre en la columna `fam`
+La columna famiila esta con otros caracteres. Separar los numeros del nombre en la columna `fam`
 
 ```{r}
-# Separar números al final de la columna `fam`
 datainf3 <- datainf2 %>%
   mutate(fam = str_trim(fam)) %>% # Limpia espacios
   separate(fam, into = c("family", "count"), 
            sep = "\\s*(\\d+)$", 
            extra = "merge", 
            fill = "right")
-
-# Revisar resultado
 head(datainf3)
 ```
-primer grafico de columnas
+### Estadistica descriptiva general
 
-```{r}
+Numero de ejemplares por `organismo`, `familia` y `especie`
+
+
+Primer grafico de columnas por tipo de familia
+
+\begin{landscape}
+```{r fig.width=12, fig.height=8}
 # Crear el gráfico de columnas
-ggplot(datainf3, aes(x = reorder(organismos, -no_ejemplares),
+ggplot(datainf3 %>% 
+         drop_na(family),
+       aes(x = reorder(family, -no_ejemplares),
                      y = no_ejemplares)) +
   geom_col(fill = "steelblue") +
   labs(
-    title = "Número de ejemplares por grupo",
+    title = "Número de ejemplares por familia",
     x = "Familia",
     y = "Número de ejemplares"
   ) +
-  #facet_wrap(~punto, ncol=1)+
-  theme_few() +
+  facet_wrap(~punto, ncol=13)+
+  theme_minimal() +
   theme(axis.text.x = element_text(angle = 90, 
-                                   hjust = 1))+
+                                   hjust = 1),
+        axis.text.y = element_text(size=6))+
   coord_flip()
 ```
+\end{landscape}
+
+Primer grafico de columnas por tipo de tipo de sustrato
+
+\begin{landscape}
+
+```{r fig.width=12, fig.height=8}
+# Crear el gráfico de columnas
+ggplot(datainf3 %>% 
+         drop_na(family),
+       aes(x = reorder(family, -no_ejemplares),
+                     y = no_ejemplares)) +
+  geom_col(fill = "orange") +
+  labs(
+    title = "Número de ejemplares por familia",
+    x = "Familia",
+    y = "Número de ejemplares"
+  ) +
+  facet_wrap(~tipo_sedimento, ncol=13)+
+  theme_few() +
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1),
+        axis.text.y = element_text(size=6))+
+  coord_flip()
+```
+\end{landscape}
+
 por especie
 
-```{r}
+\begin{landscape}
+```{r fig.width=12, fig.height=8}
 # Crear el gráfico de columnas
-ggplot(datainf3, aes(x = reorder(especie, -no_ejemplares),
+ggplot(datainf3 %>% 
+         drop_na(especie), aes(x = reorder(especie, -no_ejemplares),
                      y = no_ejemplares)) +
   geom_col(fill = "green") +
   labs(
@@ -94,17 +180,93 @@ ggplot(datainf3, aes(x = reorder(especie, -no_ejemplares),
     x = "Familia",
     y = "Número de ejemplares"
   ) +
-  #facet_wrap(~punto, ncol=1)+
+  facet_wrap(~punto, ncol=13)+
   theme_few() +
   theme(axis.text.x = element_text(angle = 90, 
-                                   hjust = 1))+
+                                   hjust = 1),
+        axis.text.y = element_text(size=6))+
   coord_flip()
 ```
-por especie
+\end{landscape}
+
+tablas
+
+```{r message=FALSE}
+# Tabla para número de ejemplares por familia
+tabla_familia <- datainf3 %>%
+  group_by(family) %>%
+  summarise(total_ejemplares = sum(no_ejemplares, na.rm = TRUE)) %>%
+  arrange(desc(total_ejemplares))
+```
+
+
+```{r message=FALSE}
+tabla_familia %>%
+  kbl(booktabs = TRUE,
+      format = "latex",
+    caption = "Número de ejemplares por familia") %>%
+  kable_paper("hover", 
+              full_width = F) %>%
+  kable_styling(latex_options = c("striped","repeat_header"),
+                full_width = FALSE,
+                font_size=5)
+tabla_familia
+```
+
+
+```{r}
+# Tabla para número de ejemplares por especie
+tabla_especie <- datainf3 %>%
+  group_by(especie) %>%
+  summarise(total_ejemplares = sum(no_ejemplares, na.rm = TRUE)) %>%
+  arrange(desc(total_ejemplares))
+```
+
+
+```{r message=FALSE}
+tabla_especie %>%
+  kbl(booktabs = TRUE,
+      format = "latex",
+      position="ht!",
+    caption = "Número de ejemplares por especie") %>%
+  kable_paper("hover", 
+              full_width = F)%>%
+  kable_styling(latex_options = c("striped"),
+                full_width = FALSE,
+                font_size=5)
+tabla_especie
+```
+
+
+```{r}
+# Tabla para número de ejemplares por organismos
+tabla_organismos <- datainf3 %>%
+  group_by(organismos) %>%
+  summarise(total_ejemplares = sum(no_ejemplares, na.rm = TRUE)) %>%
+  arrange(desc(total_ejemplares))
+```
+
+
+```{r message=FALSE}
+tabla_organismos%>%
+  kbl(booktabs = TRUE,
+      format = "latex",
+      position="ht!",
+    caption = "Número de ejemplares por organismos") %>%
+  kable_paper("hover", 
+              full_width = F)%>%
+  kable_styling(latex_options = c("striped"),
+                full_width = FALSE,
+                font_size=5)
+
+tabla_organismos
+```
+
 
 ```{r}
 # Crear el gráfico de columnas
-ggplot(datainf3, aes(x = reorder(punto, -no_ejemplares),
+ggplot(datainf3 %>% 
+         drop_na(organismos), aes(x = reorder(organismos, -no_ejemplares),
                      y = no_ejemplares)) +
   geom_col(fill = "red") +
   labs(
@@ -181,7 +343,7 @@ E73 se encuentra muy alejado del resto, lo que sugiere que su composición de fa
 nmds
 
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 # Preparar la matriz de abundancia: puntos x familias
 abundancia <- datainf3 %>%
   mutate(no_ejemplares = replace_na(as.numeric(no_ejemplares), 0)) %>%
@@ -193,14 +355,6 @@ abundancia <- datainf3 %>%
 # NMDS usando la distancia Bray-Curtis
 nmds_result <- metaMDS(abundancia, distance = "bray", k = 2, trymax = 100)
 
-# Visualización del NMDS
-plot(nmds_result, type = "n", main = "NMDS: Familias por Punto de Muestreo")
-text(nmds_result, display = "sites", col = "blue")  # Etiquetas de puntos
-points(nmds_result$points, pch = 19, col = "darkgreen")  # Puntos en el gráfico
-```
-o
-
-```{r}
 # Extraer coordenadas del NMDS
 nmds_coords <- as.data.frame(nmds_result$points)
 nmds_coords$punto <- rownames(nmds_coords)
@@ -212,6 +366,155 @@ ggplot(nmds_coords, aes(x = MDS1, y = MDS2, label = punto)) +
   labs(title = "NMDS: Familias por Punto de Muestreo",
        x = "Dimensión 1", y = "Dimensión 2") +
   theme_minimal()
+
+```
+tabla
+
+
+```{r}
+# Crear tabla resumen del número de ejemplares por punto, familia y especie
+tabla_resumen <- datainf3 %>%
+  filter(!is.na(no_ejemplares)) %>% 
+  group_by(punto, family, especie) %>%
+  summarise(total_ejemplares = sum(no_ejemplares, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(total_ejemplares))
+
+# Mostrar tabla formateada con kable
+tabla_resumen %>%
+  kable(
+    caption = "Número total de ejemplares por punto, familia y especie",
+    col.names = c("Punto", "Familia", "Especie", "Total de Ejemplares"),
+    format = "markdown"
+  ) %>% 
+   kable_styling(bootstrap_options = c("striped", 
+                                      "hover", 
+                                      "condensed",
+                                      "responsive"))
+```
+ahora por punto de muestreo.
+
+```{r eval=FALSE}
+# Filtrar y resumir datos por punto, familia y especie
+tabla_resumen <- datainf3 %>%
+  filter(!is.na(no_ejemplares)) %>%
+  group_by(punto, family, especie) %>%
+  summarise(total_ejemplares = sum(no_ejemplares, na.rm = TRUE), .groups = "drop") %>%
+  arrange(punto, desc(total_ejemplares))
+
+# Dividir datos por cada punto
+tablas_por_punto <- tabla_resumen %>%
+  group_split(punto) %>%
+  set_names(unique(tabla_resumen$punto))  # Nombres de las listas para cada punto
+
+# Crear tablas con kable por cada punto
+tablas_kable <- map(tablas_por_punto, function(df) {
+  df %>%
+    kable(
+      caption = paste("Punto de Muestreo:", unique(df$punto)),
+      col.names = c("Punto de Muestreo", "Familia", "Especie", "Total de Ejemplares"),
+      format = "html"
+    ) %>%
+    kable_styling(
+      bootstrap_options = c("striped", "hover", "condensed"),
+      full_width = FALSE
+    )
+})
+
+# Mostrar un ejemplo para el primer punto
+tablas_kable
+```
+
+Indices
+
+```{r}
+
+# Limpiar datos y filtrar columnas relevantes
+data_ecologica <- datainf3 %>%
+  filter(!is.na(no_ejemplares), !is.na(family), !is.na(especie)) %>%
+  group_by(punto, especie) %>%
+  summarise(abundancia = sum(no_ejemplares, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(names_from = especie, values_from = abundancia, values_fill = 0) %>%
+  column_to_rownames("punto")
+
+# Calcular índices por punto
+indices_ecologicos <- data.frame(
+  Punto = rownames(data_ecologica),
+  Riqueza_S = rowSums(data_ecologica > 0),                       # Riqueza de especies
+  Abundancia_N = rowSums(data_ecologica),                        # Abundancia total
+  Shannon_H = diversity(data_ecologica, index = "shannon"),      # Índice de Shannon
+  Pielou_J = diversity(data_ecologica, index = "shannon") / log(rowSums(data_ecologica > 0)) # Equidad de Pielou
+)
+
+# Crear tabla formateada con flextable
+tabla_ecologica <- flextable(indices_ecologicos) %>%
+  theme_vanilla() %>%
+  set_header_labels(
+    Punto = "Punto",
+    Riqueza_S = "Riqueza (S)",
+    Abundancia_N = "Abundancia Total (N)",
+    Shannon_H = "Índice de Shannon (H')",
+    Pielou_J = "Equidad de Pielou (J')"
+  ) %>%
+  set_table_properties(width = 1, layout = "autofit") %>%  # Ajustar al ancho máximo
+  autofit()
+
+# Mostrar tabla en reporte
+tabla_ecologica
+
+```
+
+
+PCA
+
+```{r warning=FALSE}
+# Asegúrate de que los valores faltantes en `no_ejemplares` sean 0
+datainf3 <- datainf3 %>%
+  mutate(no_ejemplares = replace_na(as.numeric(no_ejemplares), 0))
+
+# Crear matriz de abundancia: puntos x familias
+abundancia <- datainf3 %>%
+  group_by(punto, family, depth_m) %>%
+  summarise(total_ejemplares = sum(no_ejemplares, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(names_from = family, values_from = total_ejemplares, values_fill = 0) %>%
+  column_to_rownames("punto")
+
+# Verificar la matriz
+#print(abundancia)
+
+pca_result <- rda(abundancia)  
+
+# Gráfico del PCA  
+biplot(pca_result, main = "PCA: Diversidad y Ordenamiento de Familias por Punto")  
+
+# Agregar nombres de los puntos (puntos de muestreo)  
+text(pca_result$CA$u[, 1], pca_result$CA$u[, 2], labels = rownames(abundancia), 
+     pos = 4, col = "blue", cex = 0.8)
+```
+Plot
+
+
+```{r}
+# Datos del PCA: eigenvalues y proporciones explicadas
+eigenvalues <- c(215.2064, 108.1001, 49.8737, 46.20706, 32.57200, 
+                 26.46028, 4.744452, 2.480818, 0.680853, 0.4804556, 
+                 0.2448195, 0.1414454)
+
+# Proporción explicada
+proportion_explained <- eigenvalues / sum(eigenvalues)
+components <- paste0("PC", 1:length(proportion_explained))
+
+
+# Gráfico de barras
+barpca <- ggplot(data = data.frame(Components = components, Variance = proportion_explained),
+       aes(x = Components, y = Variance)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_text(aes(label = scales::percent(Variance, accuracy = 0.1)), 
+            vjust = -0.5, size = 3.5) +
+  labs(title = "Varianza explicada por componente", 
+       x = "Componentes principales", 
+       y = "Proporción de varianza explicada") +
+  theme_minimal()
+barpca
 
 ```
 
