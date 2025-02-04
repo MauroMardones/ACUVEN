@@ -2,9 +2,9 @@
 title: "Infauna Bentónica Proyecto ACUVEN 2019"
 subtitle: "Analisis Exploratorio de Datos Infauna. Descripción cuantitativa y ecológica"
 author:
-  - Mauricio Mardones^[Instituto español de Oceanografía, Cádiz. mauricio.mardones@csic.ieo.es]
-  - Yolanda Lucas ^[Instituto español de Oceanografía, Cádiz.]
-  - Marina Delgado ^[Instituto español de Oceanografía, Cádiz.]
+    - Yolanda Lucas ^[Instituto español de Oceanografía, Cádiz.]
+    - Mauricio Mardones^[Instituto español de Oceanografía, Cádiz. mauricio.mardones@csic.ieo.es]
+    - Marina Delgado ^[Instituto español de Oceanografía, Cádiz.]
 output:
   bookdown::pdf_document2:
     number_sections: false
@@ -34,14 +34,11 @@ header-includes:
 
 ```{r setup1, echo=FALSE}
 rm(list = ls())
-knitr::opts_chunk$set(eval=TRUE,
-                      echo = FALSE,
+knitr::opts_chunk$set(echo = FALSE,
                       message = FALSE,
                       warning = FALSE,
                       fig.align = 'center',
-                      dev = 'jpeg',
-                      dpi = 300,
-                      tidy.opts=list(width.cutoff=80))
+                      tidy.opts=list(width.cutoff=50))
 #XQuartz is a mess, put this in your onload to default to cairo instead
 options(bitmapType = "cairo") 
 # (https://github.com/tidyverse/ggplot2/issues/2655)
@@ -59,7 +56,7 @@ Librerías necesarias para manipulacion y analisis estadisticos de los datos
 
 ### Cargar Librerías 
 
-```{r}
+```{r echo = TRUE}
 library(tidyr)
 library(tidyverse)
 library(readxl)
@@ -71,22 +68,91 @@ library(ggdendro)
 library(flextable)
 library(purrr)
 library(kableExtra)
+library(sf)
 ```
-### Leer data
+
+
+### Mapas
+
+
+Ahora produzco un mapa de las grillas utilizadas en campaña ACUVEN.  Leo Shapes y transformo a la proyección correcta.
+
+```{r}
+costandalucia <- st_read("~/IEO/IN_BENTOS/SHP_Chirla/costa_proyectada.shp")
+grilla <- st_read("~/IEO/IN_BENTOS/SHP_Chirla/cuadriculas_definitivo.shp")
+demarca <- st_read("~/IEO/IN_BENTOS/SHP_Chirla/Demarcaciones_Marinas_WGS84_2018.shp")
+# Transformo a objetos sf con la crs correcta
+grilla1 <- st_transform(grilla, 
+                        "+init=epsg:4326")
+costandalucia1 <- st_transform(costandalucia,
+                                "+init=epsg:4326")
+# to UTM 3578
+dema1 <- st_transform(demarca,
+                      "+init=epsg:4326")
+```
+
+ahora cambio nombres de grilla
+
+
+```{r}
+grilla2 <- grilla1 %>%
+  rename("Estaciones" = "ID_CELDA") 
+```
+
+
+
+ploteo grilla
+
+etiquetar estaciones hasta ahora trabajadas por YL.
+
+"E39"  "E125" "E55"  "E59"  "E60"  "E63"  "E64"  "E65"  "E68"  "E69"  "E70"  "E72"  "E73"
+
+
+```{r}
+
+grilla_etiquetas <- grilla2 %>% 
+  filter(Estaciones %in% c(39,125,55,60,63,64,65,68,69,70,72,73))
+grillado <- ggplot() +
+  geom_sf(data = grilla2, fill = NA, color = "red") +
+  geom_sf(data = costandalucia1, fill = "#fee8c8") +
+  geom_sf(data = grilla_etiquetas,
+          fill = "blue",
+          alpha = 0.4, color = "black") +
+  geom_text(
+    data = grilla_etiquetas %>% 
+      sf::st_centroid() %>%   # Coordenadas del centro de las celdas
+      sf::st_as_sf(),
+    aes(label = Estaciones, geometry = geometry),
+    stat = "sf_coordinates",
+    size = 3, color = "black", nudge_y = 0
+  ) +
+  coord_sf() +
+  xlab(expression(paste(Longitude^o, ~ 'O'))) +
+  ylab(expression(paste(Latitude^o, ~ 'S'))) +
+  theme_few() +
+  xlim(-7.6, -6.3) +
+  ylim(36.65, 37.3)
+```
+
+\begin{landscape}
+```{r fig.height=8, fig.width=12}
+grillado
+```
+\end{landscape}
+
+### Manipulacion  procesamiento de la base
+
+Leer data
 
 ```{r}
 datainf <- read_excel(here("data",
-                           "fAUNA MUESTREOS.xlsx"))
+                           "FAUNA_MUESTREOS_AVANZADA.xlsx"),
+                      sheet = "DATOS")
 ```
-
-
-
-### Manipulacion  procesamiento
 
 Limpio las columnas si es necesario.
 
 ```{r}
-names(datainf)
 datainf <- datainf %>%
   clean_names()
 names(datainf)
@@ -96,7 +162,7 @@ names(datainf)
 
 ```{r}
 datainf2 <- datainf %>%
-  select(1,4,7,8,9,10,11,12,13,14) %>% 
+  select(1,4,9,10,11:23) %>% 
   fill("caja" , "punto", "depth_m", "fecha",
        "tipo", "tipo_sedimento",.direction = "down")
 ```
@@ -105,7 +171,7 @@ La columna famiila esta con otros caracteres. Separar los numeros del nombre en 
 
 ```{r}
 datainf3 <- datainf2 %>%
-  mutate(fam = str_trim(fam)) %>% # Limpia espacios
+  mutate(fam = str_trim(familia)) %>% # Limpia espacios
   separate(fam, into = c("family", "count"), 
            sep = "\\s*(\\d+)$", 
            extra = "merge", 
@@ -119,13 +185,13 @@ Numero de ejemplares por `organismo`, `familia` y `especie`
 
 Primer grafico de columnas por tipo de familia
 
-\begin{landscape}
-```{r fig.width=12, fig.height=8}
-# Crear el gráfico de columnas
-ggplot(datainf3 %>% 
+
+
+```{r}
+famplot <- ggplot(datainf3 %>% 
          drop_na(family),
-       aes(x = reorder(family, -no_ejemplares),
-                     y = no_ejemplares)) +
+       aes(x = reorder(family, -n_individuos),
+                     y = n_individuos)) +
   geom_col(fill = "steelblue") +
   labs(
     title = "Número de ejemplares por familia",
@@ -139,63 +205,19 @@ ggplot(datainf3 %>%
         axis.text.y = element_text(size=6))+
   coord_flip()
 ```
-\end{landscape}
-
-Primer grafico de columnas por tipo de tipo de sustrato
-
 \begin{landscape}
 
-```{r fig.width=12, fig.height=8}
-# Crear el gráfico de columnas
-ggplot(datainf3 %>% 
-         drop_na(family),
-       aes(x = reorder(family, -no_ejemplares),
-                     y = no_ejemplares)) +
-  geom_col(fill = "orange") +
-  labs(
-    title = "Número de ejemplares por familia",
-    x = "Familia",
-    y = "Número de ejemplares"
-  ) +
-  facet_wrap(~tipo_sedimento, ncol=13)+
-  theme_few() +
-  theme(axis.text.x = element_text(angle = 90, 
-                                   hjust = 1),
-        axis.text.y = element_text(size=6))+
-  coord_flip()
+```{r fig.height=8, fig.width=12}
+famplot
 ```
 \end{landscape}
 
-por especie
-
-\begin{landscape}
-```{r fig.width=12, fig.height=8}
-# Crear el gráfico de columnas
-ggplot(datainf3 %>% 
-         drop_na(especie), aes(x = reorder(especie, -no_ejemplares),
-                     y = no_ejemplares)) +
-  geom_col(fill = "green") +
-  labs(
-    title = "Número de ejemplares por especie",
-    x = "Familia",
-    y = "Número de ejemplares"
-  ) +
-  facet_wrap(~punto, ncol=13)+
-  theme_few() +
-  theme(axis.text.x = element_text(angle = 90, 
-                                   hjust = 1),
-        axis.text.y = element_text(size=6))+
-  coord_flip()
-```
-\end{landscape}
-
-tablas
 
 ```{r message=FALSE}
 # Tabla para número de ejemplares por familia
 tabla_familia <- datainf3 %>%
   group_by(family) %>%
-  summarise(total_ejemplares = sum(no_ejemplares, na.rm = TRUE)) %>%
+  summarise(total_ejemplares = sum(n_individuos, na.rm = TRUE)) %>%
   arrange(desc(total_ejemplares))
 ```
 
@@ -214,35 +236,69 @@ tabla_familia
 ```
 
 
+Primer grafico de columnas por filo
+
+global
+
 ```{r}
-# Tabla para número de ejemplares por especie
-tabla_especie <- datainf3 %>%
-  group_by(especie) %>%
-  summarise(total_ejemplares = sum(no_ejemplares, na.rm = TRUE)) %>%
-  arrange(desc(total_ejemplares))
+
+filoplot1 <- ggplot(datainf3, 
+       aes(x = reorder(filo, -n_individuos),
+           y = n_individuos)) +
+  geom_col(fill = "orange") +
+  labs(
+    title = "Número total de ejemplares por filo",
+    x = "Filo",
+    y = "Número total de ejemplares"
+  ) +
+  #facet_wrap(~punto, ncol = 13) +
+  theme_few() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),
+        axis.text.y = element_text(size = 6))+
+  coord_flip()
+
+filoplot1
 ```
 
 
-```{r message=FALSE}
-tabla_especie %>%
-  kbl(booktabs = TRUE,
-      format = "latex",
-      position="ht!",
-    caption = "Número de ejemplares por especie") %>%
-  kable_paper("hover", 
-              full_width = F)%>%
-  kable_styling(latex_options = c("striped"),
-                full_width = FALSE,
-                font_size=5)
-tabla_especie
+```{r}
+# Crear el gráfico de columnas
+summary_data <- datainf3 %>%
+  drop_na(filo) %>%
+  group_by(filo, punto) %>%
+  summarise(total_individuos = sum(n_individuos))
+
+filoplot <- ggplot(summary_data, 
+       aes(x = reorder(filo, -total_individuos),
+           y = total_individuos)) +
+  geom_col(fill = "orange") +
+  geom_text(aes(label = total_individuos),
+            vjust = -0.3, size = 3) +  # Mostrar el valor acumulado encima
+  labs(
+    title = "Número total de ejemplares por filo",
+    x = "Filo",
+    y = "Número total de ejemplares"
+  ) +
+  facet_wrap(~punto, ncol = 13) +
+  theme_few() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),
+        axis.text.y = element_text(size = 6))+
+  coord_flip()
 ```
+
+\begin{landscape}
+```{r fig.width=12, fig.height=8}
+filoplot
+```
+\end{landscape}
+
 
 
 ```{r}
 # Tabla para número de ejemplares por organismos
 tabla_organismos <- datainf3 %>%
-  group_by(organismos) %>%
-  summarise(total_ejemplares = sum(no_ejemplares, na.rm = TRUE)) %>%
+  group_by(filo) %>%
+  summarise(total_ejemplares = sum(n_individuos, na.rm = TRUE)) %>%
   arrange(desc(total_ejemplares))
 ```
 
@@ -252,7 +308,7 @@ tabla_organismos%>%
   kbl(booktabs = TRUE,
       format = "latex",
       position="ht!",
-    caption = "Número de ejemplares por organismos") %>%
+    caption = "Número de ejemplares por filo") %>%
   kable_paper("hover", 
               full_width = F)%>%
   kable_styling(latex_options = c("striped"),
@@ -263,11 +319,70 @@ tabla_organismos
 ```
 
 
+por especie
+
+
+```{r fig.width=12, fig.height=8}
+summary_esp <- datainf3 %>%
+  drop_na(especie) %>%
+  group_by(especie, punto) %>%
+  summarise(total_individuos = sum(n_individuos))
+
+espeplot <- ggplot(summary_esp %>% 
+         drop_na(especie), aes(x = reorder(especie, -total_individuos),
+                               y =total_individuos)) +
+  geom_col(fill = "green") +
+  geom_text(aes(label = total_individuos), 
+            position = position_dodge(width = 0.9), 
+            hjust = -0.1, 
+            size = 3) +  # Tamaño del texto
+  labs(
+    title = "Número de ejemplares por especie",
+    x = "Familia",
+    y = "Número de ejemplares"
+  ) +
+  facet_wrap(~punto, ncol = 13) +
+  theme_few() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),
+        axis.text.y = element_text(size = 6)) +
+  coord_flip()
+```
+\begin{landscape}
+```{r fig.width=12, fig.height=8}
+espeplot
+```
+\end{landscape}
+
+
+```{r}
+# Tabla para número de ejemplares por especie
+tabla_especie <- datainf3 %>%
+  group_by(especie) %>%
+  summarise(total_ejemplares = sum(n_individuos, na.rm = TRUE)) %>%
+  arrange(desc(total_ejemplares))
+```
+
+
+```{r message=FALSE}
+tabla_especie %>%
+  kbl(booktabs = TRUE,
+      format = "latex",
+      position="ht!",
+    caption = "Numero de ejemplares por especie") %>%
+  kable_paper("hover", 
+              full_width = F)%>%
+  kable_styling(latex_options = c("striped"),
+                full_width = FALSE,
+                font_size=5)
+tabla_especie
+```
+
+
 ```{r}
 # Crear el gráfico de columnas
 ggplot(datainf3 %>% 
-         drop_na(organismos), aes(x = reorder(organismos, -no_ejemplares),
-                     y = no_ejemplares)) +
+         drop_na(organismos), aes(x = reorder(organismos, -n_individuos),
+                     y = n_individuos)) +
   geom_col(fill = "red") +
   labs(
     title = "Número de ejemplares por punto",
@@ -282,14 +397,14 @@ ggplot(datainf3 %>%
 ```
 
 ```{r}
-# Asegúrate de que `no_ejemplares` sea numérico
+# Asegúrate de que `n_individuos` sea numérico
 datainf4 <- datainf3 %>%
-  mutate(no_ejemplares = replace_na(as.numeric(no_ejemplares), 0))
+  mutate(n_individuos = replace_na(as.numeric(n_individuos), 0))
 
 # Crear matriz de abundancia: puntos x familias
 abundancia <- datainf4 %>%
   group_by(punto, family) %>%
-  summarise(total_ejemplares = sum(no_ejemplares, na.rm = TRUE)) %>%
+  summarise(total_ejemplares = sum(n_individuos, na.rm = TRUE)) %>%
   pivot_wider(names_from = family, values_from = total_ejemplares, values_fill = 0) %>%
   column_to_rownames("punto")
 
@@ -346,9 +461,9 @@ nmds
 ```{r message=FALSE, warning=FALSE}
 # Preparar la matriz de abundancia: puntos x familias
 abundancia <- datainf3 %>%
-  mutate(no_ejemplares = replace_na(as.numeric(no_ejemplares), 0)) %>%
+  mutate(n_individuos = replace_na(as.numeric(n_individuos), 0)) %>%
   group_by(punto, family) %>%
-  summarise(total_ejemplares = sum(no_ejemplares, na.rm = TRUE)) %>%
+  summarise(total_ejemplares = sum(n_individuos, na.rm = TRUE)) %>%
   pivot_wider(names_from = family, values_from = total_ejemplares, values_fill = 0) %>%
   column_to_rownames("punto")
 
@@ -374,9 +489,9 @@ tabla
 ```{r}
 # Crear tabla resumen del número de ejemplares por punto, familia y especie
 tabla_resumen <- datainf3 %>%
-  filter(!is.na(no_ejemplares)) %>% 
+  filter(!is.na(n_individuos)) %>% 
   group_by(punto, family, especie) %>%
-  summarise(total_ejemplares = sum(no_ejemplares, na.rm = TRUE), .groups = "drop") %>%
+  summarise(total_ejemplares = sum(n_individuos, na.rm = TRUE), .groups = "drop") %>%
   arrange(desc(total_ejemplares))
 
 # Mostrar tabla formateada con kable
@@ -396,9 +511,9 @@ ahora por punto de muestreo.
 ```{r eval=FALSE}
 # Filtrar y resumir datos por punto, familia y especie
 tabla_resumen <- datainf3 %>%
-  filter(!is.na(no_ejemplares)) %>%
+  filter(!is.na(n_individuos)) %>%
   group_by(punto, family, especie) %>%
-  summarise(total_ejemplares = sum(no_ejemplares, na.rm = TRUE), .groups = "drop") %>%
+  summarise(total_ejemplares = sum(n_individuos, na.rm = TRUE), .groups = "drop") %>%
   arrange(punto, desc(total_ejemplares))
 
 # Dividir datos por cada punto
@@ -430,9 +545,9 @@ Indices
 
 # Limpiar datos y filtrar columnas relevantes
 data_ecologica <- datainf3 %>%
-  filter(!is.na(no_ejemplares), !is.na(family), !is.na(especie)) %>%
+  filter(!is.na(n_individuos), !is.na(family), !is.na(especie)) %>%
   group_by(punto, especie) %>%
-  summarise(abundancia = sum(no_ejemplares, na.rm = TRUE), .groups = "drop") %>%
+  summarise(abundancia = sum(n_individuos, na.rm = TRUE), .groups = "drop") %>%
   pivot_wider(names_from = especie, values_from = abundancia, values_fill = 0) %>%
   column_to_rownames("punto")
 
@@ -466,15 +581,18 @@ tabla_ecologica
 
 PCA
 
+[link util](https://statisticsglobe.com/biplot-pca-r)
+
+
 ```{r warning=FALSE}
-# Asegúrate de que los valores faltantes en `no_ejemplares` sean 0
+# Asegúrate de que los valores faltantes en `n_individuos` sean 0
 datainf3 <- datainf3 %>%
-  mutate(no_ejemplares = replace_na(as.numeric(no_ejemplares), 0))
+  mutate(n_individuos = replace_na(as.numeric(n_individuos), 0))
 
 # Crear matriz de abundancia: puntos x familias
 abundancia <- datainf3 %>%
   group_by(punto, family, depth_m) %>%
-  summarise(total_ejemplares = sum(no_ejemplares, na.rm = TRUE), .groups = "drop") %>%
+  summarise(total_ejemplares = sum(n_individuos, na.rm = TRUE), .groups = "drop") %>%
   pivot_wider(names_from = family, values_from = total_ejemplares, values_fill = 0) %>%
   column_to_rownames("punto")
 
